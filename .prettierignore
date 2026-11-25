@@ -1,4 +1,4 @@
 dist/
 pnpm-lock.yaml
-contracts/openapi.yaml
+contracts/openapi.json
 src/lib/api.gen.ts

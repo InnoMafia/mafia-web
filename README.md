@@ -17,13 +17,16 @@ make check
 Vite проксирует `/api` на `http://127.0.0.1:8080`. Для другого адреса
 укажите `API_DEV_URL` при запуске `pnpm dev`. В контейнере Caddy раздаёт
 SPA и проксирует запросы с того же домена на `API_UPSTREAM` (`api:8080`
-по умолчанию). `SITE_ADDRESS` задаёт адрес прослушивания, по умолчанию `:8080`.
+по умолчанию). Нативные gRPC-вызовы Caddy проксирует на `GRPC_UPSTREAM`
+(`api:9090` по умолчанию). `SITE_ADDRESS` задаёт адрес прослушивания,
+по умолчанию `:8080`.
 
 UI использует Tailwind 4 и конфигурацию shadcn/ui для Base UI. Общие
 компоненты находятся в `src/components/ui`, палитра — в `src/theme.css`.
 
 ## Контракт API
 
-`contracts/openapi.yaml` — зафиксированная копия [спецификации API](https://github.com/InnoMafia/mafia-api/blob/e0a7c361f85c902ffed1e060636ab9b4a9b165be/api/openapi.yaml). `make generate` обновляет `src/lib/api.gen.ts`. Интеграционная
+`contracts/openapi.json` — копия OpenAPI 3.1, сгенерированного из Protobuf в
+`mafia-api`. `make generate` обновляет `src/lib/api.gen.ts`. Интеграционная
 проверка в `mafia-ops` сравнивает эту копию со спецификацией проверяемой
-ревизии API.
+ревизии API и документом, отданным запущенным сервером.

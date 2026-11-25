@@ -11,8 +11,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Report platform availability */
-        get: operations["getServiceStatus"];
+        /** Reports platform availability. An unavailable database returns UNAVAILABLE (HTTP 503). */
+        get: operations["PlatformService_GetServiceStatus"];
         put?: never;
         post?: never;
         delete?: never;
@@ -25,9 +25,25 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        ServiceStatus: {
-            /** @enum {string} */
-            status: "ready" | "unavailable";
+        /** @description The Status type defines a logical error model suitable for different programming environments. */
+        "google.rpc.Status": {
+            /**
+             * Format: int32
+             * @description The status code, which should be an enum value of google.rpc.Code.
+             */
+            code?: number;
+            /** @description A list of messages that carry the error details. */
+            details?: ({
+                "@type"?: string;
+            } & {
+                [key: string]: unknown;
+            })[];
+            /** @description A developer-facing error message. */
+            message?: string;
+        };
+        "mafia.platform.v1.GetServiceStatusResponse": {
+            /** @description The value is "ready" when the platform is accepting requests. */
+            status?: string;
         };
     };
     responses: never;
@@ -38,7 +54,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    getServiceStatus: {
+    PlatformService_GetServiceStatus: {
         parameters: {
             query?: never;
             header?: never;
@@ -47,22 +63,22 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description API and PostgreSQL are available */
+            /** @description A successful response. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ServiceStatus"];
+                    "application/json": components["schemas"]["mafia.platform.v1.GetServiceStatusResponse"];
                 };
             };
-            /** @description PostgreSQL is temporarily unavailable */
-            503: {
+            /** @description An unexpected error response. */
+            default: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ServiceStatus"];
+                    "application/json": components["schemas"]["google.rpc.Status"];
                 };
             };
         };

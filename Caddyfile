@@ -1,10 +1,18 @@
 {
 	admin off
+	servers {
+		protocols h1 h2 h2c h3
+	}
 }
 
 {$SITE_ADDRESS::8080} {
 	root * /srv/mafia
 	encode zstd gzip
+
+	@grpc protocol grpc
+	handle @grpc {
+		reverse_proxy h2c://{$GRPC_UPSTREAM:api:9090}
+	}
 
 	@api path /api /api/* /healthz /readyz
 	handle @api {
