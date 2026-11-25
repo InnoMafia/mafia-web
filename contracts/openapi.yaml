@@ -1,0 +1,31 @@
+openapi: 3.0.3
+info:
+  title: InnoMafia API
+  version: 0.1.0
+paths:
+  /api/v1/status:
+    get:
+      operationId: getServiceStatus
+      summary: Report platform availability
+      responses:
+        '200':
+          description: API and PostgreSQL are available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceStatus'
+        '503':
+          description: PostgreSQL is temporarily unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceStatus'
+components:
+  schemas:
+    ServiceStatus:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ready, unavailable]

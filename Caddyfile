@@ -1,0 +1,22 @@
+{
+	admin off
+}
+
+{$SITE_ADDRESS::8080} {
+	root * /srv/mafia
+	encode zstd gzip
+
+	@api path /api /api/* /healthz /readyz
+	handle @api {
+		reverse_proxy {$API_UPSTREAM:api:8080}
+	}
+
+	handle /assets/* {
+		file_server
+	}
+
+	handle {
+		try_files {path} /index.html
+		file_server
+	}
+}
