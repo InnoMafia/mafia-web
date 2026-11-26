@@ -1,0 +1,660 @@
+.judge,
+.judge-dialog {
+  color-scheme: dark;
+  --judge-bg: #13151a;
+  --judge-panel: #1b1e25;
+  --judge-inset: #171a20;
+  --judge-hover: #262a34;
+  --judge-border: #343844;
+  --judge-text: #f3eee5;
+  --judge-muted: #a6adb9;
+  --judge-accent: #efbd79;
+  --judge-ink: #25190d;
+  --judge-danger: #f09a92;
+  color: var(--judge-text);
+}
+
+.judge {
+  min-height: 100dvh;
+  background: var(--judge-bg);
+  --judge-header-height: 60px;
+}
+
+.judge :focus-visible,
+.judge-dialog :focus-visible {
+  outline: 2px solid var(--judge-accent);
+  outline-offset: 2px;
+}
+
+.judge-shell {
+  width: min(100% - 36px, 1520px);
+  margin-inline: auto;
+}
+
+.judge-header {
+  position: sticky;
+  z-index: 3;
+  top: 0;
+  background: var(--judge-inset);
+  border-bottom: 1px solid var(--judge-border);
+}
+
+.judge-header-inner,
+.judge-panel-header,
+.judge-controls,
+.judge-stepper,
+.judge-ballot-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.judge-header-inner {
+  min-height: var(--judge-header-height);
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.judge-header h1 {
+  margin-inline-end: auto;
+  font-size: clamp(16px, 2vw, 22px);
+  font-weight: 680;
+  letter-spacing: -0.035em;
+}
+
+.judge-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 17px;
+  font-weight: 720;
+  letter-spacing: -0.035em;
+}
+
+.judge-brand > span {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--judge-accent);
+  color: var(--judge-ink);
+}
+
+.judge-brand svg {
+  width: 17px;
+  height: 17px;
+  fill: currentColor;
+}
+
+.judge-result {
+  color: var(--judge-accent);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.judge-layout {
+  display: grid;
+  grid-template-areas: 'timer' 'nights' 'reports' 'main';
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding-block: 16px 36px;
+}
+
+.judge-main {
+  display: grid;
+  grid-area: main;
+  min-width: 0;
+  gap: 12px;
+}
+
+.judge-timer {
+  grid-area: timer;
+}
+.judge-nights {
+  grid-area: nights;
+}
+.judge-reports {
+  grid-area: reports;
+}
+
+.judge-panel,
+.judge-inset {
+  min-width: 0;
+  border: 1px solid var(--judge-border);
+  border-radius: 12px;
+  background: var(--judge-panel);
+}
+
+.judge-inset {
+  border-radius: 8px;
+  background: var(--judge-inset);
+}
+
+.judge-panel-header {
+  flex-wrap: wrap;
+  justify-content: space-between;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--judge-border);
+}
+
+.judge-panel-header h2,
+.judge-panel > summary,
+.judge-notes > label {
+  font-size: 14px;
+  font-weight: 670;
+}
+
+.judge details > summary {
+  padding: 9px 12px;
+  cursor: pointer;
+}
+
+.judge-inset > summary {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.judge-section,
+.judge-notes {
+  padding: 11px;
+}
+
+.judge-section,
+.judge-notes,
+.judge-report-form,
+.judge-history,
+.judge-picker,
+.judge-ballot-row,
+.judge-archived-round {
+  display: grid;
+  gap: 8px;
+}
+
+.judge-controls {
+  flex-wrap: wrap;
+}
+
+.judge-section.judge-controls {
+  display: flex;
+}
+.judge-muted {
+  color: var(--judge-muted);
+  font-size: 12px;
+}
+
+.judge-compact,
+.judge-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid var(--judge-border);
+  border-radius: 7px;
+  font-size: 12px;
+  line-height: 1.15;
+  font-weight: 620;
+  cursor: pointer;
+}
+
+.judge-compact {
+  min-height: 30px;
+  padding: 5px 8px;
+}
+
+.judge-icon-button {
+  width: 26px;
+  min-height: 26px;
+  flex: 0 0 auto;
+  padding: 2px;
+  background: var(--judge-inset);
+  color: var(--judge-text);
+  font-size: 13px;
+}
+
+.judge-secondary {
+  background: var(--judge-inset);
+  color: var(--judge-text);
+}
+
+.judge-primary {
+  border-color: transparent;
+  background: var(--judge-accent);
+  color: var(--judge-ink);
+}
+
+.judge-primary:hover:not(:disabled) {
+  background: #ffd098;
+}
+
+.judge-secondary:hover:not(:disabled),
+.judge-icon-button:not(.judge-primary):hover:not(:disabled) {
+  background: var(--judge-hover);
+}
+
+.judge-compact svg,
+.judge-icon-button svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.judge button:disabled,
+.judge-dialog button:disabled,
+.judge select:disabled,
+.judge input:disabled {
+  opacity: 0.46;
+  cursor: default;
+}
+
+.judge [aria-pressed='true'] {
+  border-color: var(--judge-accent);
+  background: #3a2c20;
+  color: var(--judge-accent);
+}
+
+.judge-field {
+  width: 100%;
+  min-width: 0;
+  min-height: 30px;
+  border: 1px solid var(--judge-border);
+  border-radius: 6px;
+  padding: 5px 7px;
+  background: var(--judge-inset);
+  color: var(--judge-text);
+  font-size: 13px;
+}
+
+.judge-field:user-invalid {
+  border-color: var(--judge-danger);
+}
+
+.judge-field::placeholder {
+  color: var(--judge-muted);
+}
+.judge textarea {
+  resize: vertical;
+}
+
+.judge-timer {
+  position: sticky;
+  z-index: 2;
+  top: calc(var(--judge-header-height) + 7px);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 9px 11px;
+  box-shadow: 0 4px 18px #0003;
+}
+
+.judge-clock {
+  display: grid;
+  min-width: 102px;
+  flex: 1 0 102px;
+  line-height: 1.12;
+}
+
+.judge-time {
+  color: var(--judge-accent);
+  font-size: clamp(28px, 3vw, 39px);
+  font-weight: 740;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.055em;
+}
+
+.judge-time[data-expired='true'],
+.judge-stepper [data-warning='true'] {
+  color: var(--judge-danger);
+}
+
+.judge-settings {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.judge-settings label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.judge-settings input {
+  accent-color: var(--judge-accent);
+}
+
+.judge-seating-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(125px, 1fr));
+  gap: 7px;
+}
+
+.judge-seating-fields label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--judge-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.judge-seating-fields span {
+  width: 16px;
+}
+
+.judge-table-wrap {
+  overflow-x: auto;
+}
+.judge-table,
+.judge-reports-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.judge-table :is(th, td),
+.judge-reports-table :is(th, td) {
+  padding: 5px 4px;
+  text-align: center;
+  border-bottom: 1px solid var(--judge-border);
+}
+
+.judge-table thead,
+.judge-reports-table thead {
+  color: var(--judge-muted);
+  background: var(--judge-inset);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.judge-table tbody tr:last-child :is(th, td),
+.judge-reports-table tbody tr:last-child :is(th, td) {
+  border-bottom: 0;
+}
+
+.judge-table tbody tr[data-speaking='true'] {
+  background: #393023;
+}
+.judge-table tbody tr[data-out='true'] .judge-player-name {
+  color: var(--judge-muted);
+}
+
+.judge-seat-number {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.judge-seat-number[data-opener='true'] {
+  color: var(--judge-accent);
+  box-shadow: inset 2px 0 var(--judge-accent);
+}
+
+.judge-player {
+  display: grid;
+  gap: 3px;
+  justify-items: start;
+  text-align: left;
+}
+
+.judge-player-name {
+  display: grid;
+  justify-items: start;
+  max-width: 100%;
+  padding: 2px;
+  background: transparent;
+  color: var(--judge-text);
+  font-size: 13px;
+  line-height: 1.15;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.judge-player-name:hover:not(:disabled) {
+  background: var(--judge-hover);
+}
+
+.judge-player-name small,
+.judge-reports-table small {
+  display: block;
+  color: var(--judge-muted);
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.judge-speech-options {
+  gap: 3px;
+}
+.judge-speech-options .judge-compact {
+  min-height: 23px;
+  padding: 2px 4px;
+  white-space: nowrap;
+}
+
+.judge-stepper {
+  justify-content: center;
+  gap: 3px;
+  color: var(--judge-text);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.judge-tech {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 2px 5px;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+}
+
+.judge-tech > :first-child {
+  grid-row: span 2;
+}
+
+.judge-tech .judge-icon-button {
+  width: 22px;
+  min-height: 21px;
+}
+
+.judge-tech output {
+  color: var(--judge-danger);
+}
+.judge-score {
+  width: 56px;
+  padding-inline: 4px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.judge-role {
+  width: 100%;
+  max-width: 98px;
+  padding-inline: 3px;
+  font-size: 11px;
+}
+.judge-role[data-role='mafia'],
+.judge-role[data-role='don'] {
+  color: #c7b3ea;
+}
+.judge-role[data-role='sheriff'] {
+  color: var(--judge-accent);
+}
+.judge-expanded-row td {
+  padding: 7px 11px;
+  background: var(--judge-inset);
+  text-align: left;
+}
+.judge-picker .judge-field {
+  width: 100%;
+  flex: 1 1 75px;
+}
+
+.judge-night-field {
+  display: grid;
+  gap: 3px;
+  font-size: 12px;
+}
+.judge-night-field > span {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  color: var(--judge-muted);
+}
+.judge-night-field strong {
+  color: var(--judge-accent);
+}
+
+.judge-reports-table {
+  table-layout: fixed;
+  font-size: 12px;
+}
+
+.judge-reports-table :is(th, td) {
+  padding: 5px 2px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.judge-reports-table th .judge-icon-button {
+  margin-top: 3px;
+}
+.judge-reports-table th {
+  min-width: 40px;
+}
+
+.judge-ballot-row {
+  padding: 8px;
+}
+.judge-ballot-heading {
+  justify-content: space-between;
+  font-size: 13px;
+}
+.judge-vote-number {
+  width: 49px;
+  text-align: center;
+}
+.judge-vote-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+.judge-vote-summary li {
+  display: grid;
+  gap: 3px;
+}
+
+.judge-backdrop {
+  position: fixed;
+  z-index: 9;
+  inset: 0;
+  background: #090b10b8;
+}
+.judge-dialog {
+  position: fixed;
+  z-index: 10;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  width: min(460px, 100% - 28px);
+  max-height: 90dvh;
+  transform: translate(-50%, -50%);
+  gap: 12px;
+  overflow: auto;
+  padding: 19px;
+  border: 1px solid var(--judge-border);
+  border-radius: 13px;
+  background: var(--judge-panel);
+}
+.judge-dialog h2 {
+  font-size: 18px;
+  font-weight: 680;
+}
+.judge-dialog p {
+  color: var(--judge-muted);
+  font-size: 13px;
+}
+.judge-bookmark {
+  font: 12px monospace;
+}
+
+@media (min-width: 1180px) {
+  .judge-layout {
+    grid-template-areas: 'nights timer reports' 'nights main reports';
+    grid-template-columns: clamp(192px, 15.5vw, 235px) minmax(0, 1fr) clamp(
+        220px,
+        18.2vw,
+        275px
+      );
+    grid-template-rows: auto 1fr;
+  }
+  .judge-mode {
+    display: none;
+  }
+}
+
+@media (max-width: 1179px) {
+  .judge-table[data-mode='game'] .judge-score-column,
+  .judge-table[data-mode='points'] .judge-game-column {
+    display: none;
+  }
+
+  .judge-nights .judge-side-content {
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    align-items: start;
+  }
+}
+
+@media (min-width: 1380px) {
+  .judge-player {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .judge-speech-options {
+    flex-wrap: nowrap;
+  }
+}
+
+@media (max-width: 520px) {
+  .judge-shell {
+    width: calc(100% - 16px);
+  }
+  .judge {
+    --judge-header-height: 52px;
+  }
+  .judge-header-inner {
+    gap: 7px;
+    flex-wrap: wrap;
+  }
+  .judge-brand {
+    font-size: 0;
+  }
+  .judge-result {
+    display: none;
+  }
+  .judge-header h1 {
+    font-size: 17px;
+  }
+  .judge-table :is(th, td) {
+    padding-inline: 2px;
+  }
+  .judge-table .judge-stepper {
+    gap: 2px;
+  }
+  .judge-table .judge-icon-button {
+    width: 22px;
+    min-height: 24px;
+  }
+
+  .judge-tech .judge-icon-button {
+    min-height: 21px;
+  }
+  .judge-settings {
+    grid-template-columns: auto auto;
+  }
+}
