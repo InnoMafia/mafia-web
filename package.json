@@ -17,10 +17,12 @@
     "@base-ui/react": "1.9.0",
     "@tanstack/react-query": "^5.90.0",
     "clsx": "^2.1.1",
+    "lucide-react": "1.80.0",
     "openapi-fetch": "0.17.0",
     "react": "19.3.1",
     "react-dom": "19.3.1",
-    "tailwind-merge": "^3.7.1"
+    "tailwind-merge": "^3.7.1",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.0",
