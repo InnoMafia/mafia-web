@@ -1,45 +1,21 @@
 import { Button } from '@/components/ui/button'
-import {
-  ArrowRight,
-  Pause,
-  Play,
-  RotateCcw,
-  Timer as TimerIcon,
-} from 'lucide-react'
+import { Pause, Play, RotateCcw, Square } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { durations, remainingTime, type Game, type SendAction } from './game'
+import type { SendAction } from './game'
+import { playerLabel, remainingTime, type Game } from './game-state'
 
-type SpeechTimerProps = {
-  game: Game
-  send: SendAction
-}
-
-export function SpeechTimer({ game, send }: SpeechTimerProps) {
-  const [now, setNow] = useState(Date.now)
+export function SpeechTimer({ game, send }: { game: Game; send: SendAction }) {
   const { timer } = game
-  const locked = game.outcome !== null
-  const activeSpeaker = game.players.find(
-    (player) => player.seat === game.speaker,
-  )
-  const remainingMs = remainingTime(timer, now)
-  const seconds = Math.ceil(remainingMs / 1000)
-  const running = timer.deadline !== null && remainingMs > 0
-  const paused =
-    !running && remainingMs > 0 && remainingMs < timer.duration * 1000
-  const time =
-    String(Math.floor(seconds / 60)).padStart(2, '0') +
-    ':' +
-    String(seconds % 60).padStart(2, '0')
-
+  const [now, setNow] = useState(Date.now)
   useEffect(() => {
     const deadline = timer.deadline
     if (deadline === null) return
     const tick = () => {
-      const current = Date.now()
-      setNow(current)
-      if (current >= deadline) window.clearInterval(interval)
+      const at = Date.now()
+      setNow(at)
+      if (at >= deadline) window.clearInterval(interval)
     }
-    const interval = window.setInterval(tick, 150)
+    const interval = window.setInterval(tick, 100)
     window.addEventListener('focus', tick)
     return () => {
       window.clearInterval(interval)
@@ -47,97 +23,116 @@ export function SpeechTimer({ game, send }: SpeechTimerProps) {
     }
   }, [timer.deadline])
 
-  let status = 'Готов к запуску'
-  if (running) status = 'Идёт речь'
-  if (paused) status = 'Пауза'
-  if (remainingMs === 0) status = 'Время вышло'
-  if (locked) status = 'Игра завершена'
+  const left = remainingTime(timer, now)
+  const seconds = Math.ceil(left / 1000)
+  const running = timer.deadline !== null && left > 0
+  const time =
+    String(Math.floor(seconds / 60)).padStart(2, '0') +
+    ':' +
+    String(seconds % 60).padStart(2, '0')
+  const speaker =
+    left > 0 && timer.speaker !== null
+      ? 'Говорит ' + playerLabel(game, timer.speaker)
+      : null
+  const status =
+    speaker ??
+    (timer.mode === 'countdown'
+      ? 'Общий отсчёт'
+      : left === 0
+        ? 'Время вышло'
+        : 'Таймер речи')
 
   return (
-    <section className="judge-panel judge-timer" aria-labelledby="timer-title">
-      <div className="judge-panel-header">
-        <h2 id="timer-title">
-          <TimerIcon aria-hidden="true" /> Таймер речи
-        </h2>
-        <div
-          className="judge-presets"
-          role="group"
-          aria-label="Длительность речи"
-        >
-          {durations.map((duration) => (
-            <button
-              key={duration}
-              type="button"
-              aria-pressed={timer.duration === duration}
-              disabled={locked || running}
-              onClick={() => send({ type: 'duration', duration })}
-            >
-              {duration} с
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="judge-timer-body">
-        <p className="judge-speaker">
-          {activeSpeaker
-            ? 'Место ' +
-              activeSpeaker.seat +
-              (activeSpeaker.name.trim()
-                ? ' · ' + activeSpeaker.name.trim()
-                : '')
-            : 'Спикер не выбран'}
-        </p>
-        <div
+    <section className="judge-panel judge-timer" aria-label="Таймер">
+      <div className="judge-clock">
+        <span
           className="judge-time"
-          data-expired={remainingMs === 0}
           role="timer"
+          data-expired={left === 0}
           aria-label={'Осталось ' + time}
         >
           {time}
-        </div>
-        <div className="judge-time-track" aria-hidden="true">
-          <span
-            style={{
-              transform:
-                'scaleX(' + remainingMs / (timer.duration * 1000) + ')',
-            }}
-          />
-        </div>
-        <p className="judge-timer-status" role="status">
-          {status}
-        </p>
-        <div className="judge-timer-actions">
-          <Button
-            className="judge-primary"
-            disabled={locked}
-            onClick={() => send({ type: running ? 'pause' : 'start' })}
-          >
-            {running ? (
-              <Pause aria-hidden="true" />
-            ) : (
-              <Play aria-hidden="true" />
-            )}
-            {running ? 'Пауза' : paused ? 'Продолжить' : 'Запустить'}
-          </Button>
-          <button
-            className="judge-icon-button judge-timer-reset"
-            type="button"
-            aria-label="Сбросить таймер"
-            title="Сбросить таймер"
-            onClick={() => send({ type: 'reset' })}
-            disabled={locked}
-          >
-            <RotateCcw aria-hidden="true" />
-          </button>
-        </div>
-        <button
-          className="judge-next-speaker"
-          type="button"
-          onClick={() => send({ type: 'nextSpeaker' })}
-          disabled={locked || game.players.every((player) => player.out)}
+        </span>
+        <span className="judge-muted">{status}</span>
+      </div>
+      <div
+        className="judge-controls"
+        role="group"
+        aria-label="Управление таймером"
+      >
+        <Button
+          className="judge-icon-button judge-primary"
+          title={running ? 'Пауза' : 'Запустить'}
+          aria-label={running ? 'Приостановить таймер' : 'Запустить таймер'}
+          disabled={left === 0}
+          onClick={() => send({ type: running ? 'pause' : 'start' })}
         >
-          Следующий спикер <ArrowRight aria-hidden="true" />
-        </button>
+          {running ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
+        </Button>
+        <Button
+          className="judge-icon-button"
+          title="Остановить"
+          aria-label="Остановить таймер"
+          disabled={left === 0}
+          onClick={() => send({ type: 'stop' })}
+        >
+          <Square aria-hidden="true" />
+        </Button>
+        <Button
+          className="judge-icon-button"
+          title="Перезапустить"
+          aria-label="Перезапустить таймер"
+          onClick={() => send({ type: 'restart' })}
+        >
+          <RotateCcw aria-hidden="true" />
+        </Button>
+      </div>
+      <div className="judge-controls" role="group" aria-label="Общий отсчёт">
+        {([10, 20, 60] as const).map((duration) => (
+          <Button
+            className="judge-compact judge-secondary"
+            key={duration}
+            aria-label={'Общий отсчёт ' + duration + ' секунд'}
+            aria-pressed={
+              timer.mode === 'countdown' &&
+              timer.duration === duration &&
+              left > 0
+            }
+            onClick={() => send({ type: 'countdown', duration })}
+          >
+            {duration} с
+          </Button>
+        ))}
+      </div>
+      <div className="judge-settings">
+        <label>
+          <input
+            type="checkbox"
+            checked={game.hideRoles}
+            onChange={(event) =>
+              send({
+                type: 'setting',
+                key: 'hideRoles',
+                value: event.currentTarget.checked,
+              })
+            }
+          />
+          Скрыть роли
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={game.namedVoting}
+            onChange={(event) =>
+              send({
+                type: 'setting',
+                key: 'namedVoting',
+                value: event.currentTarget.checked,
+              })
+            }
+          />
+          Поимённые голоса
+        </label>
       </div>
     </section>
   )

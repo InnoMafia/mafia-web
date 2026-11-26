@@ -1,182 +1,93 @@
-import {
-  Mic,
-  Minus,
-  Plus,
-  RotateCcw,
-  UserMinus,
-  Users,
-  Vote,
-} from 'lucide-react'
-import { roleLabels, type Game, type Role, type SendAction } from './game'
+import { Button } from '@/components/ui/button'
+import { Shuffle } from 'lucide-react'
+import { useState, type FormEvent } from 'react'
+import type { SendAction } from './game'
+import type { Game } from './game-state'
 
-type SeatingProps = {
-  game: Game
-  send: SendAction
-}
+export function Seating({ game, send }: { game: Game; send: SendAction }) {
+  const [notice, setNotice] = useState('')
+  const [open, setOpen] = useState(
+    () => !game.players.some((player) => player.name),
+  )
 
-export function Seating({ game, send }: SeatingProps) {
-  const locked = game.outcome !== null
-  const activeCount = game.players.filter((player) => !player.out).length
+  function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const data = new FormData(event.currentTarget)
+    const names = game.players.map((player) =>
+      String(data.get('name-' + player.seat) ?? '').trim(),
+    )
+    const shuffle =
+      (event.nativeEvent as SubmitEvent).submitter?.getAttribute('value') ===
+      'shuffle'
+    const occupied = names.flatMap((name, index) => (name ? [index] : []))
+    if (shuffle && occupied.length < 2) {
+      setNotice('Для перемешивания нужны хотя бы два участника')
+      return
+    }
+    const order = names.map((_, index) => index)
+    if (shuffle) {
+      const shuffled = [...occupied]
+      for (let index = shuffled.length - 1; index > 0; index -= 1) {
+        const target = Math.floor(Math.random() * (index + 1))
+        const previous = shuffled[index]
+        shuffled[index] = shuffled[target]
+        shuffled[target] = previous
+      }
+      if (shuffled.every((value, index) => value === occupied[index])) {
+        shuffled.push(shuffled.shift()!)
+      }
+      occupied.forEach((position, index) => {
+        order[position] = shuffled[index]
+      })
+    }
+    send({ type: 'seating', names, order })
+    setNotice(shuffle ? 'Рассадка перемешана' : 'Рассадка сохранена')
+  }
 
   return (
-    <section
+    <details
       className="judge-panel judge-seating"
-      aria-labelledby="seating-title"
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
     >
-      <div className="judge-panel-header">
-        <h2 id="seating-title">
-          <Users aria-hidden="true" /> Рассадка
-        </h2>
-        <span className="judge-count">{activeCount} в игре</span>
-      </div>
-      <div
-        className="judge-table-scroll"
-        role="region"
-        aria-label="Таблица мест"
-        tabIndex={0}
+      <summary>Рассадка</summary>
+      <form
+        className="judge-section"
+        onSubmit={save}
+        onInput={() => setNotice('')}
       >
-        <table className="judge-table">
-          <thead>
-            <tr>
-              <th scope="col">Место</th>
-              <th scope="col">Игрок</th>
-              <th scope="col">Роль</th>
-              <th scope="col">Фолы</th>
-              <th scope="col">Действия</th>
-            </tr>
-          </thead>
-          <tbody>
-            {game.players.map((player) => {
-              const { seat, name, role, fouls, out, nominated } = player
-              const speaking = game.speaker === seat
-              const nominateLabel = nominated
-                ? 'Снять кандидатуру места '
-                : 'Выставить место '
-              const eliminateLabel = out
-                ? 'Вернуть в игру место '
-                : 'Отметить выбывшим место '
-
-              return (
-                <tr key={seat} data-speaking={speaking} data-out={out}>
-                  <th scope="row">
-                    <span className="judge-seat">{seat}</span>
-                  </th>
-                  <td>
-                    <div className="judge-player-name">
-                      <input
-                        aria-label={'Ник места ' + seat}
-                        placeholder="Ник игрока"
-                        value={name}
-                        onChange={(event) =>
-                          send({
-                            type: 'rename',
-                            seat,
-                            name: event.currentTarget.value,
-                          })
-                        }
-                        maxLength={40}
-                        autoComplete="off"
-                        disabled={locked}
-                      />
-                      {out && <span className="judge-out-label">Выбыл</span>}
-                    </div>
-                  </td>
-                  <td>
-                    <select
-                      aria-label={'Роль места ' + seat}
-                      data-role={role}
-                      value={role}
-                      onChange={(event) =>
-                        send({
-                          type: 'role',
-                          seat,
-                          role: event.currentTarget.value as Role,
-                        })
-                      }
-                      disabled={locked}
-                    >
-                      {Object.entries(roleLabels).map(([value, label]) => (
-                        <option key={value} value={value}>
-                          {label}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td>
-                    <div className="judge-stepper" data-warn={fouls > 0}>
-                      <button
-                        className="judge-icon-button"
-                        type="button"
-                        aria-label={'Снять фол места ' + seat}
-                        title="Снять фол"
-                        disabled={locked || out || fouls === 0}
-                        onClick={() => send({ type: 'foul', seat, delta: -1 })}
-                      >
-                        <Minus aria-hidden="true" />
-                      </button>
-                      <span>{fouls}</span>
-                      <button
-                        className="judge-icon-button"
-                        type="button"
-                        aria-label={'Добавить фол места ' + seat}
-                        title="Добавить фол"
-                        disabled={locked || out}
-                        onClick={() => send({ type: 'foul', seat, delta: 1 })}
-                      >
-                        <Plus aria-hidden="true" />
-                      </button>
-                    </div>
-                  </td>
-                  <td>
-                    <div className="judge-row-actions">
-                      <button
-                        className="judge-icon-button"
-                        type="button"
-                        aria-label={'Дать слово месту ' + seat}
-                        aria-pressed={speaking}
-                        title="Дать слово"
-                        disabled={locked || out}
-                        onClick={() => send({ type: 'speaker', seat })}
-                      >
-                        <Mic aria-hidden="true" />
-                      </button>
-                      <button
-                        className="judge-icon-button"
-                        type="button"
-                        aria-label={nominateLabel + seat}
-                        aria-pressed={nominated}
-                        title={
-                          nominated
-                            ? 'Снять кандидатуру'
-                            : 'Выставить на голосование'
-                        }
-                        disabled={locked || out}
-                        onClick={() => send({ type: 'nominate', seat })}
-                      >
-                        <Vote aria-hidden="true" />
-                      </button>
-                      <button
-                        className="judge-icon-button judge-eliminate"
-                        type="button"
-                        aria-label={eliminateLabel + seat}
-                        title={out ? 'Вернуть в игру' : 'Отметить выбывшим'}
-                        disabled={locked}
-                        onClick={() => send({ type: 'eliminate', seat })}
-                      >
-                        {out ? (
-                          <RotateCcw aria-hidden="true" />
-                        ) : (
-                          <UserMinus aria-hidden="true" />
-                        )}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-    </section>
+        <div className="judge-seating-fields">
+          {game.players.map((player, index) => (
+            <label key={player.seat + ':' + player.name}>
+              <span>{index + 1}</span>
+              <input
+                className="judge-field"
+                name={'name-' + player.seat}
+                aria-label={'Ник игрока ' + (index + 1)}
+                defaultValue={player.name}
+                maxLength={256}
+                autoComplete="off"
+                placeholder="Ник игрока"
+              />
+            </label>
+          ))}
+        </div>
+        <div className="judge-controls">
+          <Button className="judge-compact judge-primary" type="submit">
+            Сохранить рассадку
+          </Button>
+          <Button
+            className="judge-compact judge-secondary"
+            type="submit"
+            value="shuffle"
+          >
+            <Shuffle aria-hidden="true" /> Перемешать
+          </Button>
+          <span className="judge-muted" role="status">
+            {notice}
+          </span>
+        </div>
+      </form>
+    </details>
   )
 }

@@ -1,87 +1,140 @@
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@base-ui/react/dialog'
-import { Flag, Plus } from 'lucide-react'
-import { useState, type FormEvent } from 'react'
-import { outcomeLabels, outcomes, type Outcome, type SendAction } from './game'
+import { Download, Plus } from 'lucide-react'
+import { useState } from 'react'
+import type { SendAction } from './game'
+import { outcomes, type Game } from './game-state'
+import { bookmarklet } from './mu-export'
 
-export function GameActions({
-  outcome,
-  send,
-}: {
-  outcome: Outcome | null
-  send: SendAction
-}) {
-  const [open, setOpen] = useState(false)
-  const [choice, setChoice] = useState<Outcome | null>(null)
-  const finished = outcome !== null
-  const label = finished ? 'Новая игра' : 'Завершить игру'
-
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!finished && choice === null) return
-    if (finished) {
-      send({ type: 'newGame' })
-    } else if (choice !== null) {
-      send({ type: 'finish', outcome: choice })
-    }
-    setOpen(false)
-    setChoice(null)
-  }
-
+export function NewGame({ send }: { send: SendAction }) {
   return (
-    <Dialog.Root
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next)
-        if (!next) setChoice(null)
-      }}
-    >
-      <Dialog.Trigger className="judge-secondary">
-        {finished ? <Plus aria-hidden="true" /> : <Flag aria-hidden="true" />}
-        {label}
+    <Dialog.Root>
+      <Dialog.Trigger className="judge-compact judge-secondary">
+        <Plus aria-hidden="true" /> Новая игра
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Backdrop className="judge-backdrop" />
         <Dialog.Popup className="judge-dialog">
-          <Dialog.Title>{label}</Dialog.Title>
+          <Dialog.Title>Новая игра</Dialog.Title>
           <Dialog.Description>
-            {finished
-              ? 'Текущая рассадка и протокол будут сброшены.'
-              : 'Выберите итог игры.'}
+            Текущая рассадка и протокол будут сброшены.
           </Dialog.Description>
-          <form onSubmit={submit}>
-            {!finished && (
-              <div
-                className="judge-outcomes"
-                role="group"
-                aria-label="Итог игры"
-              >
-                {outcomes.map((result) => (
-                  <label key={result}>
-                    <input
-                      type="radio"
-                      name="outcome"
-                      checked={choice === result}
-                      onChange={() => setChoice(result)}
-                    />
-                    {outcomeLabels[result]}
-                  </label>
-                ))}
-              </div>
-            )}
-            <div className="judge-dialog-actions">
-              <Dialog.Close className="judge-secondary">Отмена</Dialog.Close>
-              <Button
-                className="judge-primary"
-                type="submit"
-                disabled={!finished && choice === null}
-              >
-                {finished ? 'Начать новую' : 'Подтвердить'}
-              </Button>
-            </div>
-          </form>
+          <div className="judge-controls">
+            <Dialog.Close className="judge-compact judge-secondary">
+              Отмена
+            </Dialog.Close>
+            <Dialog.Close
+              className="judge-compact judge-primary"
+              onClick={() => send({ type: 'newGame' })}
+            >
+              Начать новую
+            </Dialog.Close>
+          </div>
         </Dialog.Popup>
       </Dialog.Portal>
     </Dialog.Root>
+  )
+}
+
+export function GameActions({ game, send }: { game: Game; send: SendAction }) {
+  const [address, setAddress] = useState('')
+  const [feedback, setFeedback] = useState('')
+  const results = { civilian: 'Мирные', mafia: 'Мафия', draw: 'Ничья' }
+  return (
+    <section className="judge-panel">
+      <div className="judge-panel-header">
+        <h2>Итог игры</h2>
+      </div>
+      <div className="judge-section judge-controls">
+        <div className="judge-controls" role="group" aria-label="Победитель">
+          {outcomes.map((value) => (
+            <Button
+              className="judge-compact judge-secondary"
+              key={value}
+              aria-pressed={game.outcome === value}
+              onClick={() =>
+                send({
+                  type: 'outcome',
+                  value: game.outcome === value ? null : value,
+                })
+              }
+            >
+              {results[value]}
+            </Button>
+          ))}
+        </div>
+        <Dialog.Root
+          onOpenChange={(open) => {
+            if (open) {
+              setAddress(bookmarklet(game))
+              setFeedback('')
+            }
+          }}
+        >
+          <Dialog.Trigger
+            className="judge-compact judge-primary"
+            disabled={!game.players.some((player) => player.name)}
+          >
+            <Download aria-hidden="true" /> Экспорт в MU
+          </Dialog.Trigger>
+          <Dialog.Portal>
+            <Dialog.Backdrop className="judge-backdrop" />
+            <Dialog.Popup className="judge-dialog">
+              <Dialog.Title>Экспорт в MafiaUniverse</Dialog.Title>
+              <Dialog.Description>
+                Создайте закладку с этим адресом. Откройте редактирование игры в
+                MU, запустите закладку и проверьте заполненные поля перед
+                сохранением.
+              </Dialog.Description>
+              <Button
+                className="judge-compact judge-secondary"
+                draggable
+                onDragStart={(event) => {
+                  event.dataTransfer.setData('text/uri-list', address)
+                  event.dataTransfer.setData('text/plain', address)
+                  event.dataTransfer.effectAllowed = 'copy'
+                }}
+                onClick={() =>
+                  setFeedback(
+                    'Перетащите кнопку на панель закладок браузера или скопируйте адрес',
+                  )
+                }
+              >
+                Заполнить протокол MU
+              </Button>
+              <textarea
+                className="judge-field judge-bookmark"
+                aria-label="Адрес закладки"
+                value={address}
+                readOnly
+                rows={3}
+                onFocus={(event) => event.currentTarget.select()}
+              />
+              <div className="judge-controls">
+                <Button
+                  className="judge-compact judge-primary"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(address)
+                      setFeedback('Адрес скопирован')
+                    } catch {
+                      setFeedback('Выделите адрес в поле и скопируйте вручную')
+                    }
+                  }}
+                >
+                  Копировать адрес закладки
+                </Button>
+                <Dialog.Close className="judge-compact judge-secondary">
+                  Закрыть
+                </Dialog.Close>
+              </div>
+              <p className="judge-muted" role="status">
+                {feedback}
+              </p>
+            </Dialog.Popup>
+          </Dialog.Portal>
+        </Dialog.Root>
+      </div>
+    </section>
   )
 }

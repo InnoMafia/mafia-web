@@ -1,348 +1,416 @@
-import { z } from 'zod'
+import {
+  currentDay,
+  eligibleVoters,
+  newGame,
+  newNight,
+  newReport,
+  newTimer,
+  remainingTime,
+  reportFor,
+  shotNight,
+  statusOf,
+  type Game,
+  type Night,
+  type Outcome,
+  type Player,
+  type Report,
+} from './game-state'
+import { nextOpener, updateVote, type VoteAction } from './vote-state'
 
-export const phases = ['setup', 'day', 'voting', 'night'] as const
-const roles = ['unassigned', 'civilian', 'sheriff', 'mafia', 'don'] as const
-export const outcomes = ['civilian', 'mafia', 'draw'] as const
-export const durations = [30, 60, 90] as const
+type PlayerAction =
+  | { type: 'role'; id: number; role: Player['role'] }
+  | { type: 'status'; id: number; status: Player['status'] }
+  | { type: 'foul'; id: number; delta: -1 | 1 }
+  | { type: 'techFoul'; id: number; value: 0.3 | 0.6 }
+  | { type: 'undoTechFoul'; id: number; value: 0.3 | 0.6 }
+  | {
+      type: 'score'
+      id: number
+      field: 'bonus' | 'penalty' | 'technical'
+      value: number
+    }
+  | { type: 'bestMove'; id: number; picks: number[] }
 
-export type Phase = (typeof phases)[number]
-export type Role = (typeof roles)[number]
-export type Outcome = (typeof outcomes)[number]
-export type Duration = (typeof durations)[number]
+type TimerAction =
+  | { type: 'speech'; id: number; duration: 30 | 60 }
+  | { type: 'countdown'; duration: 10 | 20 | 60 }
+  | { type: 'extraSpeech'; id: number }
+  | { type: 'start' | 'pause' | 'restart' | 'stop' }
 
-export const phaseLabels: Record<Phase, string> = {
-  setup: 'Подготовка',
-  day: 'День',
-  voting: 'Голосование',
-  night: 'Ночь',
-}
+type NightAction =
+  | { type: 'night'; index: number; field: keyof Night; id: number | null }
+  | { type: 'shot'; id: number }
 
-export const roleLabels: Record<Role, string> = {
-  unassigned: 'Не назначена',
-  civilian: 'Мирный',
-  sheriff: 'Шериф',
-  mafia: 'Мафия',
-  don: 'Дон',
-}
-
-export const outcomeLabels: Record<Outcome, string> = {
-  civilian: 'Победа мирных',
-  mafia: 'Победа мафии',
-  draw: 'Ничья',
-}
-
-const seatCount = 10
-const eventLimit = 100
-export const gameStorageKey = 'innomafia.judge.v1'
-
-const seatSchema = z.int().min(1).max(seatCount)
-const playerSchema = z.object({
-  seat: seatSchema,
-  name: z.string().max(40),
-  role: z.enum(roles),
-  fouls: z.int().nonnegative(),
-  out: z.boolean(),
-  nominated: z.boolean(),
-  votes: z.int().min(0).max(seatCount),
-})
-
-const timestampSchema = z.number().min(0).max(8.64e15)
-
-const timerSchema = z
-  .object({
-    duration: z.literal(durations),
-    remainingMs: z.number().min(0).max(90_000),
-    deadline: timestampSchema.nullable(),
-  })
-  .refine((timer) => timer.remainingMs <= timer.duration * 1000)
-
-const gameSchema = z.object({
-  phase: z.enum(phases),
-  day: z.int().nonnegative(),
-  players: z
-    .array(playerSchema)
-    .length(seatCount)
-    .refine((players) =>
-      players.every((player, index) => player.seat === index + 1),
-    ),
-  speaker: seatSchema.nullable(),
-  timer: timerSchema,
-  events: z
-    .array(
-      z.object({
-        id: z.int().positive(),
-        at: timestampSchema,
-        text: z.string(),
-      }),
-    )
-    .max(eventLimit),
-  outcome: z.enum(outcomes).nullable(),
-})
-
-export type Player = z.infer<typeof playerSchema>
-export type Timer = z.infer<typeof timerSchema>
-export type Game = z.infer<typeof gameSchema>
+type ReportAction =
+  | { type: 'addReport' | 'deleteReport'; id: number }
+  | {
+      type: 'reportPicks'
+      id: number
+      field: 'red' | 'black' | 'sheriff'
+      picks: number[]
+    }
 
 export type GameAction =
-  | { type: 'phase'; phase: Phase }
-  | { type: 'rename'; seat: number; name: string }
-  | { type: 'role'; seat: number; role: Role }
-  | { type: 'foul' | 'vote'; seat: number; delta: -1 | 1 }
-  | { type: 'speaker' | 'nominate' | 'eliminate'; seat: number }
-  | {
-      type:
-        'nextSpeaker' | 'clearVotes' | 'start' | 'pause' | 'reset' | 'newGame'
-    }
-  | { type: 'duration'; duration: Duration }
-  | { type: 'finish'; outcome: Outcome }
+  | PlayerAction
+  | TimerAction
+  | NightAction
+  | ReportAction
+  | VoteAction
+  | { type: 'seating'; names: string[]; order: number[] }
+  | { type: 'notes'; notes: string }
+  | { type: 'outcome'; value: Outcome }
+  | { type: 'setting'; key: 'hideRoles' | 'namedVoting'; value: boolean }
+  | { type: 'newGame' }
 
 export type SendAction = (action: GameAction) => void
 
-type TimedAction = GameAction & { at: number }
-
-function freshTimer(duration: Duration): Timer {
-  return { duration, remainingMs: duration * 1000, deadline: null }
-}
-
-function newGame(): Game {
-  return {
-    phase: 'setup',
-    day: 0,
-    players: Array.from({ length: seatCount }, (_, index) => ({
-      seat: index + 1,
-      name: '',
-      role: 'unassigned',
-      fouls: 0,
-      out: false,
-      nominated: false,
-      votes: 0,
-    })),
-    speaker: null,
-    timer: freshTimer(60),
-    events: [],
-    outcome: null,
-  }
-}
-
-export function loadGame(): Game {
-  try {
-    const raw = localStorage.getItem(gameStorageKey)
-    if (raw) {
-      const restored = gameSchema.safeParse(JSON.parse(raw))
-      if (restored.success) return restored.data
-    }
-  } catch {
-    // An unavailable or corrupt store should still allow a session.
-  }
-  return newGame()
-}
-
-export function playerName(player: Player) {
-  return player.name.trim() || 'Место ' + player.seat
-}
-
-export function phaseName(phase: Phase, day: number) {
-  if (day > 0 && (phase === 'day' || phase === 'night')) {
-    return phaseLabels[phase] + ' ' + day
-  }
-  return phaseLabels[phase]
-}
-
-export function remainingTime(timer: Timer, at: number) {
-  if (timer.deadline === null) return timer.remainingMs
-  return Math.min(timer.remainingMs, Math.max(0, timer.deadline - at))
-}
-
-function log(game: Game, at: number, text: string): Game {
-  const id = (game.events[0]?.id ?? 0) + 1
-  return {
-    ...game,
-    events: [{ id, at, text }, ...game.events].slice(0, eventLimit),
-  }
-}
-
-function changePlayer(game: Game, player: Player): Game {
-  return {
-    ...game,
-    players: game.players.map((other) =>
-      other.seat === player.seat ? player : other,
-    ),
-  }
-}
-
-function selectSpeaker(game: Game, player: Player, at: number): Game {
-  if (player.out || player.seat === game.speaker) return game
-  return log(
-    {
-      ...game,
-      speaker: player.seat,
-      timer: freshTimer(game.timer.duration),
-    },
-    at,
-    'Слово у ' + playerName(player),
-  )
-}
-
-function updateSeat(
-  game: Game,
-  action: Extract<TimedAction, { seat: number }>,
-): Game {
-  const player = game.players.find((entry) => entry.seat === action.seat)
+function updatePlayer(game: Game, action: PlayerAction): Game {
+  const player = game.players.find(({ seat }) => seat === action.id)
   if (!player) return game
-  const name = playerName(player)
-
+  let bestMoveOrder = game.bestMoveOrder
+  let updated: Player
   switch (action.type) {
-    case 'rename':
-      return changePlayer(game, { ...player, name: action.name })
     case 'role':
-      return changePlayer(game, { ...player, role: action.role })
-    case 'foul': {
-      const fouls = Math.max(0, player.fouls + action.delta)
-      if (fouls === player.fouls || player.out) return game
-      return log(
-        changePlayer(game, { ...player, fouls }),
-        action.at,
-        name + ' · фолы: ' + fouls,
-      )
-    }
-    case 'speaker':
-      return selectSpeaker(game, player, action.at)
-    case 'nominate': {
-      if (player.out) return game
-      const nominated = !player.nominated
-      return log(
-        changePlayer(game, { ...player, nominated, votes: 0 }),
-        action.at,
-        name +
-          (nominated ? ' · в списке на голосование' : ' · снят с голосования'),
-      )
-    }
-    case 'eliminate': {
-      const out = !player.out
-      const updated = changePlayer(game, {
+      updated = { ...player, role: action.role }
+      break
+    case 'status':
+      updated = {
         ...player,
-        out,
-        nominated: false,
-        votes: 0,
-      })
-      if (out && game.speaker === player.seat) {
-        updated.speaker = null
-        updated.timer = freshTimer(game.timer.duration)
+        status: action.status,
+        restoredThrough:
+          action.status === 'alive'
+            ? game.days.length - 2
+            : player.restoredThrough,
+        fouls:
+          action.status === 'alive' ? Math.min(3, player.fouls) : player.fouls,
+        techFouls:
+          action.status === 'alive'
+            ? player.techFouls.slice(0, 1)
+            : player.techFouls,
       }
-      return log(
-        updated,
-        action.at,
-        name + (out ? ' · выбыл' : ' · снова в игре'),
+      break
+    case 'foul':
+      updated = {
+        ...player,
+        fouls: Math.max(0, Math.min(4, player.fouls + action.delta)),
+      }
+      break
+    case 'techFoul':
+      if (player.techFouls.length >= 2) return game
+      updated = {
+        ...player,
+        techFouls: [...player.techFouls, action.value],
+        technical: 0,
+      }
+      break
+    case 'undoTechFoul':
+      updated = {
+        ...player,
+        techFouls: player.techFouls.filter(
+          (_, index) => index !== player.techFouls.lastIndexOf(action.value),
+        ),
+      }
+      break
+    case 'score':
+      if (
+        !Number.isFinite(action.value) ||
+        action.value < 0 ||
+        action.value > 1.5 ||
+        (action.field === 'technical' && player.techFouls.length > 0)
       )
-    }
-    case 'vote': {
-      if (game.phase !== 'voting' || !player.nominated || player.out)
         return game
-      const votes = Math.max(
-        0,
-        Math.min(seatCount, player.votes + action.delta),
-      )
-      if (votes === player.votes) return game
-      return log(
-        changePlayer(game, { ...player, votes }),
-        action.at,
-        name + ' · голоса: ' + votes,
-      )
+      updated = {
+        ...player,
+        [action.field]: Math.round(action.value * 100) / 100,
+      }
+      break
+    case 'bestMove': {
+      const picks = [...new Set(action.picks)]
+        .filter((id) => game.players.some((p) => p.seat === id))
+        .slice(0, 3)
+      if (picks.length === 0) {
+        bestMoveOrder = bestMoveOrder.filter((id) => id !== player.seat)
+      } else if (!bestMoveOrder.includes(player.seat)) {
+        if (bestMoveOrder.length === 2) return game
+        bestMoveOrder = [...bestMoveOrder, player.seat]
+      }
+      updated = { ...player, bestMove: picks }
+      break
     }
+  }
+  return {
+    ...game,
+    bestMoveOrder,
+    players: game.players.map((p) => (p.seat === player.seat ? updated : p)),
   }
 }
 
-function changePhase(game: Game, phase: Phase, at: number): Game {
-  if (phase === game.phase) return game
-  let day = game.day
-  if (phase === 'setup') day = 0
-  if (phase === 'day' && game.phase === 'night') day += 1
-  if (phase === 'day' || phase === 'voting') day = Math.max(1, day)
+function updateTimer(game: Game, action: TimerAction, at: number): Game {
+  const { timer } = game
+  const left = remainingTime(timer, at)
+  switch (action.type) {
+    case 'speech': {
+      const player = game.players.find((p) => p.seat === action.id)
+      if (!player?.name.trim()) return game
+      const day = currentDay(game)
+      const days =
+        day.morning && statusOf(game, player) === 'alive'
+          ? [...game.days.slice(0, -1), { ...day, morning: false }]
+          : game.days
+      return {
+        ...game,
+        days,
+        timer: {
+          ...newTimer(),
+          speaker: action.id,
+          duration: action.duration,
+          remainingMs: action.duration * 1000,
+          deadline: at + action.duration * 1000,
+        },
+      }
+    }
+    case 'countdown':
+      return {
+        ...game,
+        timer: {
+          ...newTimer(),
+          mode: 'countdown',
+          duration: action.duration,
+          remainingMs: action.duration * 1000,
+          deadline: at + action.duration * 1000,
+        },
+      }
+    case 'extraSpeech': {
+      const player = game.players.find((p) => p.seat === action.id)
+      if (
+        !player ||
+        timer.speaker !== player.seat ||
+        left <= 0 ||
+        timer.extra ||
+        player.fouls > 1
+      )
+        return game
+      const players = game.players.map((p) =>
+        p.seat === player.seat ? { ...p, fouls: p.fouls + 2 } : p,
+      )
+      return {
+        ...game,
+        players,
+        timer: {
+          ...timer,
+          extra: true,
+          remainingMs: left + 30_000,
+          deadline: timer.deadline === null ? null : at + left + 30_000,
+        },
+      }
+    }
+    case 'start':
+      if (left === 0 || timer.deadline !== null) return game
+      return { ...game, timer: { ...timer, deadline: at + left } }
+    case 'pause':
+      return { ...game, timer: { ...timer, remainingMs: left, deadline: null } }
+    case 'restart':
+      return {
+        ...game,
+        timer: {
+          ...timer,
+          remainingMs: timer.duration * 1000,
+          deadline: at + timer.duration * 1000,
+        },
+      }
+    case 'stop':
+      return { ...game, timer: { ...timer, remainingMs: 0, deadline: null } }
+  }
+}
 
-  const players =
-    phase === 'night' || phase === 'setup'
-      ? game.players.map((player) => ({
-          ...player,
-          nominated: false,
-          votes: 0,
-        }))
-      : game.players
+function updateNight(game: Game, action: NightAction): Game {
+  const previous = action.id === null ? -1 : shotNight(game, action.id)
+  const trailing = game.nights.length - 1
+  let index =
+    action.type === 'night' ? action.index : previous >= 0 ? previous : trailing
+  const field = action.type === 'night' ? action.field : 'shot'
+  const value = action.type === 'shot' && previous >= 0 ? null : action.id
+  if (
+    action.type === 'shot' &&
+    previous < 0 &&
+    Object.values(game.nights[trailing]).every((target) => target === null)
+  ) {
+    const last = game.nights[trailing - 1]
+    if (last && last.shot === null && currentDay(game).morning) index -= 1
+  }
+  const nights = game.nights.map((night, i) => {
+    if (i === index) return { ...night, [field]: value }
+    if (field === 'shot' && value !== null && night.shot === value)
+      return { ...night, shot: null }
+    return night
+  })
+  if (Object.values(nights[nights.length - 1]).some((id) => id !== null))
+    nights.push(newNight())
+  return { ...game, nights }
+}
 
-  return log(
-    {
-      ...game,
-      phase,
-      day,
-      players,
-      speaker: null,
-      timer: freshTimer(game.timer.duration),
-    },
-    at,
-    phaseName(phase, day),
+function updateReport(game: Game, action: ReportAction): Game {
+  const report = reportFor(game, action.id)
+  const night = shotNight(game, action.id)
+  let next: Report | null
+  switch (action.type) {
+    case 'addReport':
+      if (report) return game
+      next = newReport(action.id, true)
+      break
+    case 'deleteReport':
+      next =
+        night >= 0 ? { ...newReport(action.id), dismissedNight: night } : null
+      break
+    case 'reportPicks': {
+      if (!report) return game
+      const { field, picks } = action
+      if (field === 'sheriff') next = { ...report, sheriff: picks[0] ?? null }
+      else {
+        const opposite = field === 'red' ? 'black' : 'red'
+        next = {
+          ...report,
+          [field]: picks,
+          [opposite]: report[opposite].filter((id) => !picks.includes(id)),
+        }
+      }
+      if (
+        !next.manual &&
+        next.red.length === 0 &&
+        next.black.length === 0 &&
+        next.sheriff === null
+      )
+        next = null
+      break
+    }
+  }
+  const reports = game.reports.filter((entry) => entry.player !== action.id)
+  return { ...game, reports: next ? [...reports, next] : reports }
+}
+
+function update(game: Game, action: GameAction, at: number): Game {
+  switch (action.type) {
+    case 'role':
+    case 'status':
+    case 'foul':
+    case 'techFoul':
+    case 'undoTechFoul':
+    case 'score':
+    case 'bestMove':
+      return updatePlayer(game, action)
+    case 'speech':
+    case 'countdown':
+    case 'extraSpeech':
+    case 'start':
+    case 'pause':
+    case 'restart':
+    case 'stop':
+      return updateTimer(game, action, at)
+    case 'night':
+    case 'shot':
+      return updateNight(game, action)
+    case 'addReport':
+    case 'deleteReport':
+    case 'reportPicks':
+      return updateReport(game, action)
+    case 'nominate':
+      if (!action.confirmed && nominationNeedsConfirmation(game, action.id, at))
+        return game
+      return updateVote(game, action)
+    case 'voteCount':
+    case 'voteVoter':
+    case 'endVote':
+    case 'lift':
+    case 'review':
+    case 'cancelReview':
+      return updateVote(game, action)
+    case 'seating': {
+      if (
+        action.names.length !== game.players.length ||
+        action.order.length !== game.players.length ||
+        new Set(action.order).size !== game.players.length ||
+        action.order.some(
+          (i) => !Number.isInteger(i) || i < 0 || i >= game.players.length,
+        )
+      )
+        return game
+      const names = action.names.map((name) => name.trim().slice(0, 256))
+      const assigned = names.map((name, index) =>
+        name && name === game.players[index]?.name ? index : -1,
+      )
+      const unused = new Set(
+        game.players
+          .map((_, index) => index)
+          .filter((index) => !assigned.includes(index)),
+      )
+      assigned.forEach((source, index) => {
+        if (source >= 0 || !names[index]) return
+        const match = [...unused].find(
+          (candidate) => game.players[candidate].name === names[index],
+        )
+        if (match !== undefined) {
+          unused.delete(match)
+          assigned[index] = match
+        }
+      })
+      const players = assigned.map((source, index) => {
+        if (source < 0) {
+          const fallback = unused.has(index) ? index : [...unused][0]
+          unused.delete(fallback)
+          source = fallback
+        }
+        return { ...game.players[source], name: names[index] ?? '' }
+      })
+      return { ...game, players: action.order.map((index) => players[index]) }
+    }
+    case 'notes':
+      return { ...game, notes: action.notes.slice(0, 2000) }
+    case 'outcome':
+      return { ...game, outcome: action.value }
+    case 'setting':
+      return { ...game, [action.key]: action.value }
+    case 'newGame':
+      return {
+        ...newGame(),
+        hideRoles: game.hideRoles,
+        namedVoting: game.namedVoting,
+      }
+  }
+}
+
+export function nominationNeedsConfirmation(
+  game: Game,
+  id: number,
+  now: number,
+) {
+  const day = currentDay(game)
+  return (
+    game.timer.speaker !== null &&
+    remainingTime(game.timer, now) > 0 &&
+    !day.main.some((vote) => vote.candidate === id) &&
+    day.main.some((vote) => game.timer.nominees.includes(vote.candidate))
   )
 }
 
-export function updateGame(game: Game, action: TimedAction): Game {
-  if (action.type === 'newGame') return newGame()
-  if (game.outcome) return game
-  if ('seat' in action) return updateSeat(game, action)
-
-  switch (action.type) {
-    case 'phase':
-      return changePhase(game, action.phase, action.at)
-    case 'nextSpeaker': {
-      const active = game.players.filter((player) => !player.out)
-      const next =
-        active.find((player) => player.seat > (game.speaker ?? 0)) ?? active[0]
-      return next ? selectSpeaker(game, next, action.at) : game
-    }
-    case 'clearVotes':
-      return log(
-        {
-          ...game,
-          players: game.players.map((player) => ({ ...player, votes: 0 })),
-        },
-        action.at,
-        'Голоса сброшены',
-      )
-    case 'duration':
-      return { ...game, timer: freshTimer(action.duration) }
-    case 'start': {
-      const remainingMs =
-        remainingTime(game.timer, action.at) || game.timer.duration * 1000
-      return {
-        ...game,
-        timer: {
-          ...game.timer,
-          remainingMs,
-          deadline: action.at + remainingMs,
-        },
-      }
-    }
-    case 'pause':
-      return {
-        ...game,
-        timer: {
-          ...game.timer,
-          remainingMs: remainingTime(game.timer, action.at),
-          deadline: null,
-        },
-      }
-    case 'reset':
-      return { ...game, timer: freshTimer(game.timer.duration) }
-    case 'finish':
-      return log(
-        {
-          ...game,
-          outcome: action.outcome,
-          timer: {
-            ...game.timer,
-            remainingMs: remainingTime(game.timer, action.at),
-            deadline: null,
-          },
-        },
-        action.at,
-        outcomeLabels[action.outcome],
-      )
+export function updateGame(
+  game: Game,
+  action: GameAction & { at: number },
+): Game {
+  const next = update(game, action, action.at)
+  const day = currentDay(next)
+  const previous = next.days.at(-2)
+  if (day.morning && previous) {
+    const opener = nextOpener(next, previous.opener)
+    if (opener !== day.opener)
+      return { ...next, days: [...next.days.slice(0, -1), { ...day, opener }] }
   }
+  if (
+    next.days.length === 1 &&
+    day.main.length === 0 &&
+    !eligibleVoters(next).includes(day.opener)
+  ) {
+    const opener = eligibleVoters(next)[0]
+    if (opener !== undefined) return { ...next, days: [{ ...day, opener }] }
+  }
+  return next
 }

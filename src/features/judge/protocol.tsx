@@ -1,103 +1,335 @@
-import { List, Minus, Plus, Vote } from 'lucide-react'
-import { playerName, type Game, type SendAction } from './game'
+import { Button } from '@/components/ui/button'
+import { Trash2 } from 'lucide-react'
+import type { SendAction } from './game'
+import {
+  placeOf,
+  playerLabel,
+  type Day,
+  type Game,
+  type Vote,
+} from './game-state'
+import { election } from './vote-state'
 
-const timeFormat = new Intl.DateTimeFormat('ru-RU', {
-  hour: '2-digit',
-  minute: '2-digit',
-})
+const voteCounts = Array.from({ length: 11 }, (_, count) => count)
+const roundLabels = { main: 'Основное голосование', runoff: 'Переголосование' }
 
-export function Protocol({ events }: { events: Game['events'] }) {
+function VotesSummary({ game, votes }: { game: Game; votes: Vote[] }) {
   return (
-    <section className="judge-panel" aria-labelledby="protocol-title">
-      <div className="judge-panel-header">
-        <h2 id="protocol-title">
-          <List aria-hidden="true" /> Протокол
-        </h2>
-        <span className="judge-count">{events.length}</span>
+    <ul className="judge-vote-summary">
+      {votes.map((vote) => (
+        <li key={vote.candidate}>
+          <strong>
+            {playerLabel(game, vote.candidate)} · {vote.count ?? '—'}
+          </strong>
+          {game.namedVoting && (
+            <span className="judge-muted">
+              {vote.voters?.length
+                ? vote.voters.map((id) => placeOf(game, id)).join(', ')
+                : vote.count
+                  ? 'Введено числом'
+                  : '—'}
+            </span>
+          )}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function Candidate({
+  game,
+  vote,
+  last,
+  electorate,
+  canRemove,
+  send,
+}: {
+  game: Game
+  vote: Vote
+  last: boolean
+  electorate: number[]
+  canRemove: boolean
+  send: SendAction
+}) {
+  const id = vote.candidate
+  const label = playerLabel(game, id)
+  return (
+    <div className="judge-inset judge-ballot-row">
+      <div className="judge-ballot-heading">
+        <div className="judge-controls">
+          {canRemove && (
+            <Button
+              className="judge-icon-button"
+              aria-label={'Снять с голосования ' + label}
+              onClick={() => send({ type: 'nominate', id })}
+            >
+              <Trash2 aria-hidden="true" />
+            </Button>
+          )}
+          <strong>{label}</strong>
+        </div>
+        <output aria-label={(last ? 'Остаток голосов ' : 'Голоса ') + label}>
+          {last && 'Авто · '}
+          {vote.count ?? '—'}
+        </output>
       </div>
-      {events.length > 0 ? (
-        <ol className="judge-events">
-          {events.map((event) => (
-            <li key={event.id}>
-              <time dateTime={new Date(event.at).toISOString()}>
-                {timeFormat.format(event.at)}
-              </time>
-              <span>{event.text}</span>
-            </li>
-          ))}
-        </ol>
+      {last ? (
+        game.namedVoting && (
+          <p className="judge-muted">
+            {vote.voters?.length
+              ? 'Голосовали: ' +
+                vote.voters.map((voter) => placeOf(game, voter)).join(', ')
+              : vote.count && !vote.voters
+                ? 'Номера появятся после поимённого ввода остальных голосов.'
+                : ''}
+          </p>
+        )
+      ) : game.namedVoting ? (
+        <>
+          <div
+            className="judge-controls"
+            role="group"
+            aria-label={'Кто голосовал за ' + label}
+          >
+            {electorate.map((voter) => (
+              <Button
+                key={voter}
+                className="judge-icon-button"
+                aria-label={playerLabel(game, voter) + ' голосует за ' + label}
+                aria-pressed={Boolean(vote.voters?.includes(voter))}
+                onClick={() => send({ type: 'voteVoter', id, voter })}
+              >
+                {placeOf(game, voter)}
+              </Button>
+            ))}
+            <Button
+              className="judge-compact judge-secondary"
+              aria-label={'Ноль голосов за ' + label}
+              aria-pressed={vote.count === 0}
+              onClick={() => send({ type: 'voteVoter', id, voter: null })}
+            >
+              0 голосов
+            </Button>
+          </div>
+          {Boolean(vote.count) && vote.voters === null && (
+            <p className="judge-muted">
+              Введено числом. Выбор игроков заменит это число.
+            </p>
+          )}
+        </>
       ) : (
-        <p className="judge-empty">Событий пока нет.</p>
+        <div
+          className="judge-controls"
+          role="group"
+          aria-label={'Количество голосов за ' + label}
+        >
+          {voteCounts.map((value) => (
+            <Button
+              key={value}
+              className="judge-icon-button"
+              aria-label={'Голосов за ' + label + ': ' + value}
+              aria-pressed={value === vote.count}
+              onClick={() => send({ type: 'voteCount', id, value })}
+            >
+              {value}
+            </Button>
+          ))}
+        </div>
       )}
-    </section>
+    </div>
+  )
+}
+
+function EditRoundButtons({
+  day,
+  index,
+  send,
+}: {
+  day: Day
+  index: number
+  send: SendAction
+}) {
+  return (
+    <div className="judge-controls">
+      {(['main', 'runoff'] as const)
+        .filter(
+          (round) =>
+            day[round].length && (day.stage !== 'runoff' || round === 'main'),
+        )
+        .map((round) => (
+          <Button
+            key={round}
+            className="judge-compact judge-secondary"
+            onClick={() => send({ type: 'review', index, round })}
+          >
+            {round === 'main'
+              ? 'Исправить основное голосование'
+              : 'Исправить переголосование'}
+          </Button>
+        ))}
+    </div>
+  )
+}
+
+function Ballot({ game, send }: { game: Game; send: SendAction }) {
+  const { day, round, votes, electorate } = election(game)
+  const review = game.review
+  const voteTotal = votes.reduce((sum, vote) => sum + (vote.count ?? 0), 0)
+  return (
+    <div className="judge-section">
+      {day.stage === 'lift' ? (
+        <>
+          <strong>Подъём стола</strong>
+          <p>
+            После переголосования снова поровну.{' '}
+            {day.tied.map((id) => playerLabel(game, id)).join(', ')}
+          </p>
+          <div className="judge-controls">
+            <Button
+              className="judge-compact judge-primary"
+              onClick={() => send({ type: 'lift', eliminate: true })}
+            >
+              Поднять всех
+            </Button>
+            <Button
+              className="judge-compact judge-secondary"
+              onClick={() => send({ type: 'lift', eliminate: false })}
+            >
+              Оставить всех
+            </Button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="judge-controls">
+            {round === 'runoff' && <strong>Переголосование</strong>}
+            <span className="judge-muted">
+              Голосующих · {electorate.length}
+            </span>
+          </div>
+          {!votes.length && (
+            <p className="judge-muted">Выставьте игроков в таблице стола.</p>
+          )}
+          {votes.map((vote, index) => (
+            <Candidate
+              key={vote.candidate}
+              game={game}
+              vote={vote}
+              last={index === votes.length - 1}
+              electorate={electorate}
+              canRemove={!review && round === 'main'}
+              send={send}
+            />
+          ))}
+          {votes.length > 0 && (
+            <div className="judge-controls">
+              <span className="judge-muted">
+                Голосов · {voteTotal} / {electorate.length}
+              </span>
+              <Button
+                className="judge-compact judge-primary"
+                disabled={votes.some((vote) => vote.count === null)}
+                onClick={() => send({ type: 'endVote' })}
+              >
+                {round === 'runoff'
+                  ? 'Завершить переголосование'
+                  : 'Завершить голосование'}
+              </Button>
+            </div>
+          )}
+        </>
+      )}
+      {review ? (
+        <div className="judge-controls">
+          <Button
+            className="judge-compact judge-secondary"
+            onClick={() => send({ type: 'cancelReview' })}
+          >
+            Отменить исправление
+          </Button>
+        </div>
+      ) : (
+        day.stage !== 'main' && (
+          <EditRoundButtons
+            day={day}
+            index={game.days.length - 1}
+            send={send}
+          />
+        )
+      )}
+    </div>
   )
 }
 
 export function Voting({ game, send }: { game: Game; send: SendAction }) {
-  const nominees = game.players.filter(
-    (player) => player.nominated && !player.out,
-  )
-  const voting = game.phase === 'voting'
-  const locked = game.outcome !== null
-  if (!voting && nominees.length === 0) return null
-
+  const history = game.days
+    .flatMap((day, index) => (day.stage !== 'main' ? [{ day, index }] : []))
+    .reverse()
+  const currentIndex = game.days.length - 1
   return (
-    <section className="judge-panel" aria-labelledby="voting-title">
-      <div className="judge-panel-header">
-        <h2 id="voting-title">
-          <Vote aria-hidden="true" /> Голосование
-        </h2>
-        {voting && nominees.some((player) => player.votes > 0) && (
-          <button
-            type="button"
-            className="judge-text-button"
-            disabled={locked}
-            onClick={() => send({ type: 'clearVotes' })}
-          >
-            Сбросить голоса
-          </button>
+    <>
+      <section className="judge-panel" aria-labelledby="judge-vote-title">
+        <div className="judge-panel-header">
+          <h2 id="judge-vote-title">Голосование · день {game.days.length}</h2>
+        </div>
+        {!game.review || game.review.index === currentIndex ? (
+          <Ballot game={game} send={send} />
+        ) : (
+          <p className="judge-section judge-muted">
+            Сейчас открыто исправление предыдущего голосования.
+          </p>
         )}
-      </div>
-      {nominees.length > 0 ? (
-        <ul className="judge-votes">
-          {nominees.map((player) => (
-            <li key={player.seat}>
-              <span>{playerName(player)}</span>
-              {voting && (
-                <div className="judge-stepper">
-                  <button
-                    className="judge-icon-button"
-                    type="button"
-                    disabled={locked || player.votes === 0}
-                    aria-label={'Убрать голос у места ' + player.seat}
-                    onClick={() =>
-                      send({ type: 'vote', seat: player.seat, delta: -1 })
-                    }
-                  >
-                    <Minus aria-hidden="true" />
-                  </button>
-                  <span aria-label={'Голосов: ' + player.votes}>
-                    {player.votes}
-                  </span>
-                  <button
-                    className="judge-icon-button"
-                    type="button"
-                    disabled={locked || player.votes >= game.players.length}
-                    aria-label={'Добавить голос месту ' + player.seat}
-                    onClick={() =>
-                      send({ type: 'vote', seat: player.seat, delta: 1 })
-                    }
-                  >
-                    <Plus aria-hidden="true" />
-                  </button>
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="judge-empty">Выставьте кандидатов кнопкой в рассадке.</p>
+      </section>
+      {history.length > 0 && (
+        <section className="judge-panel" aria-labelledby="judge-history-title">
+          <div className="judge-panel-header">
+            <h2 id="judge-history-title">Предыдущие голосования</h2>
+          </div>
+          <div className="judge-section judge-history">
+            {history.map(({ day, index }) => (
+              <details
+                key={index}
+                className="judge-inset"
+                open={
+                  (game.review?.index === index && index !== currentIndex) ||
+                  undefined
+                }
+              >
+                <summary>
+                  День {index + 1} ·{' '}
+                  {day.stage === 'done'
+                    ? day.out.length
+                      ? 'Выбыли ' +
+                        day.out.map((id) => '№' + placeOf(game, id)).join(', ')
+                      : 'Оставили всех'
+                    : roundLabels.main}
+                </summary>
+                {game.review?.index === index && index !== currentIndex ? (
+                  <Ballot game={game} send={send} />
+                ) : (
+                  <div className="judge-section">
+                    {(['main', 'runoff'] as const)
+                      .filter(
+                        (round) =>
+                          day[round].length &&
+                          (round !== 'runoff' || day.stage !== 'runoff'),
+                      )
+                      .map((round) => (
+                        <div key={round} className="judge-archived-round">
+                          <strong>{roundLabels[round]}</strong>
+                          <VotesSummary game={game} votes={day[round]} />
+                        </div>
+                      ))}
+                    {day.stage === 'done' && !game.review && (
+                      <EditRoundButtons day={day} index={index} send={send} />
+                    )}
+                  </div>
+                )}
+              </details>
+            ))}
+          </div>
+        </section>
       )}
-    </section>
+    </>
   )
 }
