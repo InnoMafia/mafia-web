@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button'
+import { AlertDialog } from '@base-ui/react/alert-dialog'
 import { Trash2 } from 'lucide-react'
 import { Fragment, useState } from 'react'
 import type { SendAction } from './game'
@@ -17,6 +18,45 @@ const fields = [
   ['black', 'Чёрные'],
   ['sheriff', 'Шериф'],
 ] as const
+
+function DeleteReport({
+  player,
+  onDelete,
+}: {
+  player: string
+  onDelete: () => void
+}) {
+  return (
+    <AlertDialog.Root>
+      <AlertDialog.Trigger
+        className="judge-icon-button"
+        aria-label={'Удалить протокол ' + player}
+      >
+        <Trash2 aria-hidden="true" />
+      </AlertDialog.Trigger>
+      <AlertDialog.Portal>
+        <AlertDialog.Backdrop className="judge-backdrop" />
+        <AlertDialog.Popup className="judge-dialog">
+          <AlertDialog.Title>Удалить протокол?</AlertDialog.Title>
+          <AlertDialog.Description>
+            Записи игрока {player} будут удалены.
+          </AlertDialog.Description>
+          <div className="judge-controls">
+            <AlertDialog.Close className="judge-compact judge-secondary">
+              Отмена
+            </AlertDialog.Close>
+            <AlertDialog.Close
+              className="judge-compact judge-primary"
+              onClick={onDelete}
+            >
+              Удалить
+            </AlertDialog.Close>
+          </div>
+        </AlertDialog.Popup>
+      </AlertDialog.Portal>
+    </AlertDialog.Root>
+  )
+}
 
 export function DeathReports({ game, send }: { game: Game; send: SendAction }) {
   const [owner, setOwner] = useState('')
@@ -96,20 +136,13 @@ export function DeathReports({ game, send }: { game: Game; send: SendAction }) {
                             ? 'Вручную'
                             : 'Отстрел изменён'}
                       </small>
-                      <Button
-                        className="judge-icon-button"
-                        aria-label={'Удалить протокол ' + title}
-                        onClick={() => {
-                          if (
-                            window.confirm('Удалить протокол ' + title + '?')
-                          ) {
-                            send({ type: 'deleteReport', id })
-                            if (edit?.id === id) setEdit(null)
-                          }
+                      <DeleteReport
+                        player={title}
+                        onDelete={() => {
+                          send({ type: 'deleteReport', id })
+                          if (edit?.id === id) setEdit(null)
                         }}
-                      >
-                        <Trash2 aria-hidden="true" />
-                      </Button>
+                      />
                     </th>
                     {fields.map(([field, label]) => {
                       const ids =
